@@ -4,6 +4,7 @@
 #include "dx12/context.h"
 #include "cuda/context.h"
 #include "optix/context.h"
+#include "libtorch/context.h"
 
 #include "cuda/texture.h"
 #include "cuda/shape.h"
@@ -55,6 +56,7 @@ void System::Init(bool has_window) noexcept {
     if (!has_window) {
         util::Singleton<cuda::Context>::instance()->Init();
         util::Singleton<optix::Context>::instance()->Init();
+        //util::Singleton<libtorch::Context>::instance()->Init();
         return;
     }
 
@@ -72,6 +74,7 @@ void System::Init(bool has_window) noexcept {
     m_gui_pass->Init();
     util::Singleton<cuda::Context>::instance()->Init();
     util::Singleton<optix::Context>::instance()->Init();
+    util::Singleton<libtorch::Context>::instance()->Init();
 
     EventBinder<ESystemEvent::FrameFinished>([this](void *) {
         m_gui_pass->FlipSwapBuffer();
@@ -122,6 +125,7 @@ void System::Destroy() noexcept {
     util::Singleton<cuda::CudaShapeDataManager>::instance()->Clear();
     util::Singleton<cuda::Context>::instance()->Destroy();
     util::Singleton<optix::Context>::instance()->Destroy();
+    util::Singleton<libtorch::Context>::instance()->Destroy();
     util::Singleton<DirectX::Context>::instance()->Destroy();
     util::Singleton<Log>::instance()->Destroy();
 }

@@ -7,3 +7,4 @@ data/*
 !data/static/*
 imgui.ini
 framework/static.h
+3rdparty/libtorch/

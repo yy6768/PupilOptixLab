@@ -61,3 +61,14 @@ add_sub_target(spdlog spdlog ${3rdparty_folder} "")
 
 add_sub_target(exr tinyexr ${3rdparty_folder}/tinyexr "")
 set_ide_folder(miniz ${3rdparty_folder}/tinyexr)
+
+target_include_directories(${3rdparty_target} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libtorch/include)
+target_link_libraries(${3rdparty_target} PUBLIC "${TORCH_LIBRARIES}")
+if (MSVC)
+  file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
+  add_custom_command(TARGET ${3rdparty_target}
+                     POST_BUILD
+                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                     ${TORCH_DLLS}
+                     $<TARGET_FILE_DIR:${3rdparty_target}>)
+endif (MSVC)

@@ -24,6 +24,11 @@ set(pupil_framework_name PupilOptixLab CACHE INTERNAL "")
 
 find_package(OptiX REQUIRED)
 
+
+list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/libtorch")
+find_package(Torch REQUIRED)
+
+
 set(pupil_cuda_architectures ${CMAKE_CUDA_ARCHITECTURES} CACHE INTERNAL "")
 set(pupil_cuda_version ${CUDA_VERSION} CACHE INTERNAL "")
 message(STATUS "cuda arch: ${pupil_cuda_architectures} ")
