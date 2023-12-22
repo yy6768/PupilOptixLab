@@ -10,23 +10,23 @@ namespace Pupil::libtorch {
 class DenoiseDataset : public torch::data::Dataset<DenoiseDataset> {
 public:
     DenoiseDataset(const std::string &dataset_dir) 
-        : dataset_dir_(dataset_dir) {
+        : m_dataset_dir(dataset_dir) {
 
     // 初始化数据集
-    for (const auto &scene_name : std::filesystem::directory_iterator(dataset_dir_)) {
+    for (const auto &scene_name : std::filesystem::directory_iterator(m_dataset_dir)) {
         const auto& scene_path = scene_name.path();
         std::unordered_map<std::string, std::string> exrname;
         for (const auto& filename : std::filesystem::directory_iterator(scene_name)) {
             exrname.emplace(filename.path().stem().string(), filename.path().string());
         }
-        imgs_.emplace_back(exrname);
+        m_imgs.emplace_back(exrname);
         Pupil::Log::Info("{}", scene_path.string());
     }
 
 }
 
 torch::data::Example<> get(size_t index) override {
-    std::unordered_map<std::string, std::string> exrname = imgs_[index];
+    std::unordered_map<std::string, std::string> exrname = m_imgs[index];
     util::BitmapTexture color, target, normal, depth, albedo;
 
     // 加载数据集
@@ -64,12 +64,12 @@ torch::data::Example<> get(size_t index) override {
 }
 
 torch::optional<size_t> size() const override {
-    return imgs_.size();
+    return m_imgs.size();
 }
 
 private:
-    std::string dataset_dir_;
-    std::vector<std::unordered_map<std::string, std::string>> imgs_;
+    std::string m_dataset_dir;
+    std::vector<std::unordered_map<std::string, std::string>> m_imgs;
 };
 
 } // namespace Pupil::libtorch

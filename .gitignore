@@ -8,3 +8,4 @@ data/*
 imgui.ini
 framework/static.h
 3rdparty/libtorch/
+3rdparty/TensorRT/

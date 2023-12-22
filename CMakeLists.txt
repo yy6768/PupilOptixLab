@@ -24,9 +24,15 @@ set(pupil_framework_name PupilOptixLab CACHE INTERNAL "")
 
 find_package(OptiX REQUIRED)
 
-
+###########################
+### LibTorch
 list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/libtorch")
 find_package(Torch REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+
+###########################
+### TensorRT
+find_package(TensorRT REQUIRED)
 
 
 set(pupil_cuda_architectures ${CMAKE_CUDA_ARCHITECTURES} CACHE INTERNAL "")

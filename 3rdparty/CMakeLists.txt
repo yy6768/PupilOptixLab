@@ -62,6 +62,8 @@ add_sub_target(spdlog spdlog ${3rdparty_folder} "")
 add_sub_target(exr tinyexr ${3rdparty_folder}/tinyexr "")
 set_ide_folder(miniz ${3rdparty_folder}/tinyexr)
 
+#####################
+# Torch Lib Add
 target_include_directories(${3rdparty_target} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libtorch/include)
 target_link_libraries(${3rdparty_target} PUBLIC "${TORCH_LIBRARIES}")
 if (MSVC)
@@ -72,3 +74,8 @@ if (MSVC)
                      ${TORCH_DLLS}
                      $<TARGET_FILE_DIR:${3rdparty_target}>)
 endif (MSVC)
+
+####################
+# TensorRT Lib Add
+target_include_directories(${3rdparty_target} PUBLIC ${TensorRT_INCLUDE_DIRS}) 
+target_link_libraries(${3rdparty_target} PUBLIC ${TensorRT_LIBS} nvonnxparser)

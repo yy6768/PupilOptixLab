@@ -17,10 +17,10 @@ void Context::Init() noexcept {
     assert(cuda_ctx->IsInitialized() && "cuda should be initialized before libtorch.");
 
 	if (torch::cuda::is_available()) {
-        device = torch::Device(torch::kCUDA, cuda_ctx->cuda_device_id);
+        m_device = torch::Device(torch::kCUDA, cuda_ctx->cuda_device_id);
     } else {
         Pupil::Log::Warn("Torch cuda is not available");
-        device = torch::Device(torch::kCPU);
+        m_device = torch::Device(torch::kCPU);
     }
 
     m_init_flag = true;
