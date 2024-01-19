@@ -1,5 +1,5 @@
 #include "trt_denoiser.h"
-#include "ilogger.h"
+#include "logger.h"
 
 #include "util/timer.h"
 
@@ -8,6 +8,7 @@
 #include <assert.h>
 
 #include <cuda.h>
+#include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 
 #include <NvInfer.h>
@@ -54,16 +55,17 @@ TRTDenoiser::TRTDenoiser(const std::string &model_file, ImportMode mode) {
 		}
     }
     // Create context
-    TRT_ASSERT((m_context = m_engine->createExecutionContext()) != nullptr, "Context generation fails");
+    TRT_ASSERT(m_context = std::unique_ptr<nvinfer1::IExecutionContext>(m_engine->createExecutionContext()), "Context generation fails");
     // Bind index
     // ***** Debug ******
     for (int i = 0; i < m_engine->getNbBindings(); i++) {
         Pupil::Log::Info("Binding {} : name : {}, Isinput:{}",i, m_engine->getBindingName(i), (m_engine->bindingIsInput(i) ? "Yes" : "No"));
     }
     // ***** Debug ******
-    TRT_ASSERT((m_input_idx = m_engine->getBindingIndex("input0")) == 0, "Input index wrong");
-   
-    TRT_ASSERT((m_output_idx = m_engine->getBindingIndex("output0")) == 2, "output index wrong");
+    //TRT_ASSERT((m_input_idx = m_engine->getBindingIndex("input0")) == 0, "Input index wrong");
+    m_input_idx = m_engine->getBindingIndex("input0");
+    m_output_idx = m_engine->getBindingIndex("output0");
+    //TRT_ASSERT((m_output_idx = m_engine->getBindingIndex("output0")) == 2, "output index wrong");
     // Get & calculate input
     auto input_dims = m_engine->getBindingDimensions(m_input_idx);
     auto output_dims = m_engine->getBindingDimensions(m_output_idx);
@@ -74,24 +76,27 @@ TRTDenoiser::TRTDenoiser(const std::string &model_file, ImportMode mode) {
     TRT_ASSERT(cudaMalloc(&m_device_buffer[m_output_idx], m_output_sz * sizeof(float)) == 0, "No device memory");
 
     //Extra input
-    int extra_input_idx = 1;
-    auto extra_input_dims = m_engine->getBindingDimensions(extra_input_idx);
-    auto extra_sz = GetDimsSize(extra_input_dims);
-    TRT_ASSERT(cudaMalloc(&m_device_buffer[extra_input_idx], extra_sz * sizeof(float)) == 0, "No device memory");
+    m_extra_input_idx = 1;
+    auto extra_input_dims = m_engine->getBindingDimensions(m_extra_input_idx);
+    m_extra_sz = GetDimsSize(extra_input_dims);
+    Log::Info("extra_sz:{}", m_extra_sz);
+    TRT_ASSERT(cudaMalloc(&m_device_buffer[m_extra_input_idx], m_extra_sz * sizeof(float)) == 0, "No device memory");
     
     // Cuda Stream
-    TRT_ASSERT(cudaStreamCreate(&m_stream) == 0, "Create strean fails");
+    m_stream = std::make_unique<cuda::Stream>();
+    // Output Buffer
     m_output_buffer = new float[m_output_sz];
     TRT_ASSERT(m_output_buffer != nullptr, "Output allocation fails");
+    m_extra_buffer = new float[m_extra_sz];
+    TRT_ASSERT(m_extra_buffer != nullptr, "Extra allocation fails");
+    
 }
 
 TRTDenoiser::~TRTDenoiser() {
-    delete[] m_output_buffer;
-    cudaStreamDestroy(m_stream);
-    cudaFree(m_device_buffer[m_output_idx]);
-    cudaFree(m_device_buffer[m_input_idx]);
-    m_context->destroy();
-    m_engine->destroy();
+	delete[] m_output_buffer;
+	cudaFree(m_device_buffer[m_output_idx]);
+	cudaFree(m_device_buffer[m_extra_input_idx]);
+	cudaFree(m_device_buffer[m_input_idx]);
 }
 /**
 * The module is exported by torch.onnx.export
@@ -111,13 +116,13 @@ void TRTDenoiser::BuildEngineFromOnnx(const std::string &onnx_file) {
     // Build each layer of the network
     // **********
     // DEBUG
-    for (int32_t i = 0; i < parser->getNbErrors(); ++i) {
+   /* for (int32_t i = 0; i < parser->getNbErrors(); ++i) {
         std::cout << parser->getError(i)->desc() << std::endl;
-    }
+    }*/
     // ***********
     // Try to transform to FP16
     auto config = builder->createBuilderConfig();
-   /* if (builder->platformHasFastFp16()) {
+    /*if (builder->platformHasFastFp16() && FP16_ENABLE) {
         Pupil::Log::Info("Enable fp16");
         config->setFlag(nvinfer1::BuilderFlag::kFP16);
     } else {
@@ -129,20 +134,19 @@ void TRTDenoiser::BuildEngineFromOnnx(const std::string &onnx_file) {
     cuMemGetInfo(&free_size, &total_size);
     Pupil::Log ::Info("Total GPU mem: {} MB, free GPU mem: {} MB", total_size >> 20, free_size >> 20);
     config->setMaxWorkspaceSize(free_size);
-    TRT_ASSERT((m_engine = builder->buildEngineWithConfig(*network, *config)) != nullptr, "Build engine fail");
+    TRT_ASSERT(m_engine = std::unique_ptr<nvinfer1::ICudaEngine>(builder->buildEngineWithConfig(*network, *config)), "Build engine fail");
     // Destroy the local variable
     config->destroy();
     parser->destroy();
     network->destroy();
     builder->destroy();
-    Pupil::Log::Info("Complete");
 }
 
 /**
 * Use the torch2trt file(.pth) file to build the network
 */
 void TRTDenoiser::BuildEngineFromTRT(const std::string& trt_file) {
-    Pupil::Log::Info("Build engine from cache");
+    Pupil::Log::Info("Build engine from trt engine");
     std::ifstream ifs(trt_file, std::ios::binary);
     ifs.seekg(0, std::ios::end);
     size_t sz = ifs.tellg();
@@ -151,7 +155,7 @@ void TRTDenoiser::BuildEngineFromTRT(const std::string& trt_file) {
     ifs.read(buffer.get(), sz);
     auto runtime = nvinfer1::createInferRuntime(gLogger);
     TRT_ASSERT(runtime != nullptr, "Runtime build fails");
-    TRT_ASSERT((m_engine = runtime->deserializeCudaEngine(buffer.get(), sz)) != nullptr, "Engine build fails");
+    TRT_ASSERT(m_engine = std::unique_ptr<nvinfer1::ICudaEngine>(runtime->deserializeCudaEngine(buffer.get(), sz)) , "Engine build fails");
     Pupil::Log::Info("Engine has been built");
 }
 
@@ -168,7 +172,7 @@ void TRTDenoiser::BuildEngineFromCache(const std::string &cache_file){
     ifs.read(buffer.get(), sz);
     auto runtime = nvinfer1::createInferRuntime(gLogger);
     TRT_ASSERT(runtime != nullptr, "Runtime build fails");
-    TRT_ASSERT((m_engine = runtime->deserializeCudaEngine(buffer.get(), sz)) != nullptr, "Engine build fails");
+    TRT_ASSERT(m_engine = std::unique_ptr<nvinfer1::ICudaEngine>(runtime->deserializeCudaEngine(buffer.get(), sz)), "Engine build fails");
     Pupil::Log::Info("Engine has been built");
 }
 
@@ -184,20 +188,39 @@ void TRTDenoiser::CacheEngine(const std::string& cache_file) {
 * Denoise function
 */ 
  float* TRTDenoiser::operator()(const float* input) const {
-    // preprocess for cuda
+    // Preprocess for cuda
     cudaMemcpyAsync(m_device_buffer[m_input_idx], input, 
-        m_input_sz * sizeof(float), cudaMemcpyHostToDevice, m_stream);
-    // infer
-    // *** debug
-    Timer timer;
-    timer.Start();
-    // *** debug
-    m_context->enqueueV2(m_device_buffer, m_stream, nullptr);
+        m_input_sz * sizeof(float), cudaMemcpyHostToDevice, m_stream->GetStream());
+    
+    cudaMemcpyAsync(m_device_buffer[m_extra_input_idx], m_extra_buffer, 
+        m_extra_sz * sizeof(float), cudaMemcpyHostToDevice, m_stream->GetStream() );
+    cudaEvent_t start, end;
+    cudaEventCreate(&start);
+    cudaEventCreate(&end);
+    cudaEventRecord(start, m_stream->GetStream());
+    
+#if NV_TENSORRT_MAJOR * 10 + NV_TENSORRT_MINOR >= 85
+    auto input_name = m_engine->getIOTensorName(m_input_idx);
+    auto extra_input_name = m_engine->getIOTensorName(m_extra_input_idx);
+    auto output_name = m_engine->getIOTensorName(m_output_idx);
+    TRT_ASSERT(m_context->setTensorAddress(input_name, m_device_buffer[m_input_idx]), "Set input tensor address fails");
+    TRT_ASSERT(m_context->setTensorAddress(extra_input_name, m_device_buffer[m_extra_input_idx]), "Set extra input tensor address fails");
+    TRT_ASSERT(m_context->setTensorAddress(output_name, m_device_buffer[m_output_idx]), "Set output tensor address fails");
+    TRT_ASSERT(m_context->enqueueV3(m_stream->GetStream()), "EnqueueV3 fails");
+#else // NV_TENSORRT_MAJOR * 10 + NV_TENSORRT_MINOR < 85
+    // Infer
+    TRT_ASSERT(m_context->enqueueV2(m_device_buffer, m_stream->GetStream(), nullptr), "EnqueueV2 fails");
+#endif //NV_TENSORRT_MAJOR * 10 + NV_TENSORRT_MINOR >= 85
+    cudaEventRecord(end, m_stream->GetStream());
+     //m_context->executeV2(m_device_buffer);
+    //cudaStreamSynchronize(m_stream);
+    cudaEventSynchronize(end);
+    float total_time;
+    cudaEventElapsedTime(&total_time, start, end);
+    Pupil::Log::Info("Cost time:{} ms", total_time);
+
     cudaMemcpyAsync(m_output_buffer, m_device_buffer[m_output_idx], 
-        m_output_sz * sizeof(float), cudaMemcpyDeviceToHost, m_stream);
-    cudaStreamSynchronize(m_stream);
-    timer.Stop();
-    Pupil::Log::Info("Cost time:{} ms", timer.ElapsedMilliseconds());
+        m_output_sz * sizeof(float), cudaMemcpyDeviceToHost, m_stream->GetStream());
     return m_output_buffer;
  }
 

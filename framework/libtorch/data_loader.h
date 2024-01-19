@@ -1,4 +1,5 @@
 #pragma once
+
 #include "util/texture.h"
 #include "util/log.h"
 
@@ -52,12 +53,13 @@ torch::data::Example<> get(size_t index) override {
     depth_tensor = (depth_tensor - torch::min(depth_tensor)) / (torch::max(depth_tensor) - torch::min(depth_tensor)); 
 
     torch::Tensor data_complete = torch::cat({ color_tensor, albedo_tensor, normal_tensor, depth_tensor }, 2).permute({ 2, 0, 1 });
-    torch::Tensor data_tensor = data_complete.index({ torch::indexing::Slice(), torch::indexing::Slice(0, 512), torch::indexing::Slice(0, 512) })
+    /*torch::Tensor data_tensor = data_complete.index({ torch::indexing::Slice(), torch::indexing::Slice(0, 512), torch::indexing::Slice(0, 512) })
+                                             .unsqueeze(0);*/
+    torch::Tensor data_tensor = data_complete.index({ torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice() })
                                              .unsqueeze(0);
-
     torch::Tensor target_complete = torch::from_blob(target.data, { static_cast<long long>(target.h), static_cast<long long>(target.w), 4 }, torch::kFloat)
                                     .permute({ 2, 0, 1 });
-    torch::Tensor target_tensor = target_complete.index({ torch::indexing::Slice(), torch::indexing::Slice(0, 512), torch::indexing::Slice(0, 512) })
+    torch::Tensor target_tensor = target_complete.index({ torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice() })
                                     .unsqueeze(0);
 
     return { data_tensor, target_tensor };
@@ -73,3 +75,4 @@ private:
 };
 
 } // namespace Pupil::libtorch
+
