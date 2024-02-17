@@ -122,12 +122,12 @@ void TRTDenoiser::BuildEngineFromOnnx(const std::string &onnx_file) {
     // ***********
     // Try to transform to FP16
     auto config = builder->createBuilderConfig();
-    /*if (builder->platformHasFastFp16() && FP16_ENABLE) {
+    if (builder->platformHasFastFp16() && FP16_ENABLE) {
         Pupil::Log::Info("Enable fp16");
         config->setFlag(nvinfer1::BuilderFlag::kFP16);
     } else {
         Pupil::Log::Info("Builfer not support fp16");
-    }*/
+    }
 
 
     size_t free_size, total_size;
