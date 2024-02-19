@@ -8,6 +8,9 @@ file(GLOB_RECURSE ALL_SOURCES CONFIGURE_DEPENDS "*.cpp" "*.inl")
 set(pupil_cuda_kernel_files
     system/gui/buffer_to_canvas.cu
     system/gui/buffer_to_canvas.cuh
+
+    # TensorRT Plugin
+    tensorRT/plugin/kpn_plugin_kernel.cu
 )
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${ALL_INCLUDE} ${ALL_SOURCES} ${pupil_cuda_kernel_files})

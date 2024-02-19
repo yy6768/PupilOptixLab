@@ -14,10 +14,7 @@
 namespace Pupil::tensorRT {
 class KPNPluginDynamic : public TRTPluginBase {
 public:
-    KPNPluginDynamic(const std::string &name, 
-                     const nvinfer1::Dims stride,
-                     const nvinfer1::Dims padding,
-                     const nvinfer1::Dims dilation);
+    KPNPluginDynamic(const std::string &name, const nvinfer1::Dims dilation);
 
     KPNPluginDynamic(const std::string &name, void const *data, size_t length);
 
@@ -61,8 +58,6 @@ public:
 
 private:
     const std::string mLayerName;
-    nvinfer1::Dims mStride;
-    nvinfer1::Dims mPadding;
     nvinfer1::Dims mDilation;
     
     void deserialize(uint8_t const *data, size_t length) TRTNOEXCEPT;
