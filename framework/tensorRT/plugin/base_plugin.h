@@ -27,6 +27,7 @@ typedef enum {
 
 namespace Pupil::tensorRT {
 class TRTPluginBase : public nvinfer1::IPluginV2DynamicExt {
+public:
     TRTPluginBase(const std::string &name) : mLayerName(name) {}
     // IPluginV2 Methods
     const char *getPluginVersion() const TRT_NOEXCEPT override { return "1"; }

@@ -14,7 +14,12 @@
 namespace Pupil::tensorRT {
 class KPNPluginDynamic : public TRTPluginBase {
 public:
-    KPNPluginDynamic(const std::string name);
+    KPNPluginDynamic(const std::string &name, 
+                     const nvinfer1::Dims stride,
+                     const nvinfer1::Dims padding,
+                     const nvinfer1::Dims dilation);
+
+    KPNPluginDynamic(const std::string &name, void const *data, size_t length);
 
     KPNPluginDynamic() = delete;
 
@@ -60,7 +65,7 @@ private:
     nvinfer1::Dims mPadding;
     nvinfer1::Dims mDilation;
     
-
+    void deserialize(uint8_t const *data, size_t length) TRTNOEXCEPT;
     cublasHandle_t mCublasHandle;
 };
 
@@ -75,11 +80,11 @@ public:
     nvinfer1::IPluginV2 *createPlugin(const char *name, const nvinfer1::PluginFieldCollection *fc)
         TRT_NOEXCEPT override;
 
-    nvinfer1::IPluginV2 *deserializePlugin(const char *name, const void *serialData,
+    nvinfer1::IPluginV2 *deserializePlugin(const char *name, void const * serialData,
                                            size_t serialLength) TRT_NOEXCEPT override; 
 
 };
 
-}// namespace Pupil
+}// namespace Pupil::tensorRT
 #endif// !TRT_KPN_PLUGIN_H
 
