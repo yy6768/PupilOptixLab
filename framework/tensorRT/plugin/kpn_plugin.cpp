@@ -44,7 +44,7 @@ nvinfer1::DimsExprs KPNPluginDynamic::getOutputDimensions(
     return ret;
 }
 
-// TODO Int8?
+// TODO Int8
 bool KPNPluginDynamic::supportsFormatCombination(
     int pos,
     const nvinfer1::PluginTensorDesc *ioDesc,
@@ -64,13 +64,13 @@ void KPNPluginDynamic::configurePlugin(const nvinfer1::DynamicPluginTensorDesc *
                                        const nvinfer1::DynamicPluginTensorDesc *outputs,
                                        int nbOutputs) TRT_NOEXCEPT {}
 
-// TODO
+// TODO cublas im2col matrix multiply
 size_t KPNPluginDynamic::getWorkspaceSize(const nvinfer1::PluginTensorDesc *inputs,
                                           int nbInputs,
                                           const nvinfer1::PluginTensorDesc *outputs,
                                           int nbOutputs) const TRT_NOEXCEPT {
     return 0;
-}
+   }
 
 nvinfer1::DataType KPNPluginDynamic::getOutputDataType(
     int index,
@@ -113,8 +113,6 @@ void KPNPluginDynamic::detachFromContext() TRT_NOEXCEPT {}
 
 KPNPluginDynamicCreator::KPNPluginDynamicCreator() {
     mPluginAttributes.clear();
-    mPluginAttributes.emplace_back(nvinfer1::PluginField("stride"));
-    mPluginAttributes.emplace_back(nvinfer1::PluginField("padding"));
     mPluginAttributes.emplace_back(nvinfer1::PluginField("dilation"));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();

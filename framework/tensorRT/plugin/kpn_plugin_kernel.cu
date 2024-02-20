@@ -3,6 +3,7 @@
 // Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 #include "kpn_plugin.h"
+#include "trt_common.h"
 #include <cuda.h>
 #include <cuda_fp16.h>
 
@@ -56,17 +57,91 @@ __global__ void kernelFilterKernel(
             }
         }
     }
-    output[n][c][xi][yi] = color;
+    int output_idx = off_r + xi * width + yi;
+    output[output_idx] = color;
 }
 
-// TODO
+template <typename scalar_t>
+int kernelFilterKernelLauncher(
+    const scalar_t * __restrict__ kernel,   // [B, H, W, k, k]
+    const scalar_t * __restrict__ radiance, // [B, C, H, W]
+    scalar_t * __restrict__ output,         // [B, C, H, W]
+    const int batch,
+    const int height,
+    const int width,
+    const int channel,
+    const int k0,    // filter size
+    const int half_k,// k0 / 2
+    const int dilation_h,
+    const int dilation_w
+) {
+    const dim3 blocks(GET_BLOCKS(height * width), channels, batch_size);
+    
+    kernelFilterKernel<scalar_t><<<blocks, NUM_THREADS>>>(
+        kernel,
+        radiance,
+        output,
+        batch,
+        height,
+        width,
+        channel,
+        k0,
+        half_k,
+        dilation_h,
+        dilation_w
+    );
+    cudaError_t err = cudaGetLastError();
+    if (cudaSuccess != err) {
+        fprintf(stderr, "cudaCheckError() failed at %s:%i : %s\n", __FILE__, __LINE__, cudaGetErrorString(err));
+        return 1;
+    }
+    return 0;
+}
+
+// TODO: Int8
 int KPNPluginDynamic::enqueue(const nvinfer1::PluginTensorDesc *inputDesc,
                               const nvinfer1::PluginTensorDesc *outputDesc,
                               const void *const *inputs, void *const *outputs,
                               void *workSpace, cudaStream_t stream) TRT_NOEXCEPT {
 
-    return 0;
-}
+    int kh = inputDesc[0].dims.d[1];
+    int kw = inputDesc[0].dims.d[2];
+    int k = inputDesc[0].dims.d[3];
 
+    int rb = inputDesc[1].dims.d[0];
+    int rc = inputDesc[1].dims.d[1];
+    int rh = inputDesc[1].dims.d[2];
+    int rw = inputDesc[1].dims.d[3];
+
+    const void *kernel = inputs[0];
+    const void *radiance = inputs[1];
+
+    void *output = outputs[0];
+
+    // quantization
+    float inputScale = inputDesc->scale;
+    float outputScale = outputDesc->scale;
+
+    auto data_type = inputDesc[0].type;
+    switch (data_type) {
+        case nvinfer1::DataType::kFLOAT:
+            return kernelFilterKernelLauncher<float>(
+                (float *)kernel,
+                (float *)radiance,
+                (float *)output,
+                rb, rc, rh, rw, k, k / 2, mDilation.d[0], mDilation.d[1]);
+            break;
+        case nvinfer1::DataType::kHALF:
+            return kernelFilterKernelLauncher<__half>(
+                (__half *)kernel,
+                (__half *)radiance,
+                (__half *)output,
+                rb, rc, rh, rw, k, k / 2, mDilation.d[0], mDilation.d[1]);
+        case nvinfer1::DataType::kINT8: // TODO quantization
+            return 1;
+        default:
+            return 1;
+    }
+}
 
 } // namespace Pupil::tensorRT
