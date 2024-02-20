@@ -14,7 +14,9 @@ public:
         Cache
     };
 
-    explicit TRTDenoiser(const std::string &onnx_file, ImportMode mode = ImportMode::Onnx);
+    explicit TRTDenoiser(const std::string &onnx_file, 
+        ImportMode mode = ImportMode::Onnx,
+        bool use_kpn=false);
 
     ~TRTDenoiser();
 
@@ -49,5 +51,7 @@ private:
     // Optional Extra input
     int m_extra_input_idx;
     size_t m_input_sz, m_output_sz, m_extra_sz;
+    // Use Kernel prediction plugin
+    bool m_use_plugin;
 };
 };

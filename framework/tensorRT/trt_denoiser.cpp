@@ -1,6 +1,8 @@
 #include "trt_denoiser.h"
 #include "logger.h"
 
+#include "plugin/kpn_plugin.h"
+
 #include "util/timer.h"
 
 #include <fstream>
@@ -34,7 +36,7 @@ static inline size_t GetDimsSize(const nvinfer1::Dims& dims) {
 } // namespace 
 
 namespace Pupil::tensorRT {
-TRTDenoiser::TRTDenoiser(const std::string &model_file, ImportMode mode) {
+TRTDenoiser::TRTDenoiser(const std::string &model_file, ImportMode mode, bool use_plugin): m_use_plugin(use_plugin) {
     std::filesystem::path model_path(model_file);
     Pupil::Log::Info("extension:{}", model_path.extension().string());
     auto cache_file_path = model_path;
@@ -113,6 +115,38 @@ void TRTDenoiser::BuildEngineFromOnnx(const std::string &onnx_file) {
     auto parser = nvonnxparser::createParser(*network, gLogger);
     TRT_ASSERT(parser != nullptr, "Generate parser fails");
     parser->parseFromFile(onnx_file.c_str(), static_cast<int>(nvinfer1::ILogger::Severity::kINFO));
+
+    if (m_use_plugin) {
+        // Get output
+        nvinfer1::ITensor *kernelT = network->getOutput(0);
+        nvinfer1::ITensor *radianceT = network->getOutput(1);
+        // Softmax
+        nvinfer1::ILayer *softmaxLayer = network->addSoftMax(*kernelT);
+        softmaxLayer->getOutput(0)->setName("SoftmaxKernelOutput");
+
+        // Create kpn plugin
+        nvinfer1::IPluginCreator *pluginCreator =
+            nvinfer1::getBuilderPluginRegistry(nvinfer1::EngineCapability::kDEFAULT)
+                ->getPluginCreator("KPN", "1");
+
+        // plugin field names & values
+        const char *dilationFieldName = "dilation";
+        int dilation[2] = { 1, 1 };
+
+        // PluginField
+        nvinfer1::PluginField dilationField(dilationFieldName, dilation, nvinfer1::PluginFieldType::kINT32, 2);
+
+        // add PluginField
+        nvinfer1::PluginFieldCollection *pluginFieldCollection = new nvinfer1::PluginFieldCollection();
+        pluginFieldCollection->nbFields = 1;           
+        pluginFieldCollection->fields = &dilationField;
+
+        nvinfer1::IPluginV2 *plugin = pluginCreator->createPlugin("kernel prediction", pluginFieldCollection);
+        nvinfer1::ITensor *inputTensors[] = { softmaxLayer->getOutput(0), radianceT };
+        nvinfer1::IPluginV2Layer *pluginLayer = network->addPluginV2(inputTensors, 2, *plugin);
+        pluginLayer->getOutput(0)->setName("output0");
+    }
+
     // Build each layer of the network
     // **********
     // DEBUG

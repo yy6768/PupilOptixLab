@@ -142,7 +142,7 @@ nvinfer1::IPluginV2* KPNPluginDynamicCreator::createPlugin(
             dilation.d[1] = static_cast<const int *>(fc->fields[i].data)[1];
         }
     }
-
+    delete fc;
     KPNPluginDynamic *plugin =
         new KPNPluginDynamic(name,dilation);
     plugin->setPluginNamespace(getPluginNamespace());
