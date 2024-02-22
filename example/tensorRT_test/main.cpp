@@ -62,7 +62,7 @@ int main() {
 			// Main denoise network
             case 0: test_main();	   break;
 			// Custom kernel prediction
-            case 1: test_custom_kpn(); break;
+            case 1: test_import_custom_kpn(); break;
 		}
 	}
     system->Destroy();

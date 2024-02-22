@@ -7,7 +7,16 @@
 
 #include "tensorRT/logger.h"
 
-void test_custom_kpn() {
+namespace {
+static inline size_t GetDimsSize(const nvinfer1::Dims &dims) {
+    size_t sz = 1;
+    for (size_t i = 0; i < dims.nbDims; ++i)
+        sz *= dims.d[i];
+    return sz;
+}
+}
+
+void test_import_custom_kpn() {
 
     nvinfer1::ILogger &logger = Pupil::tensorRT::gLogger;
     // ´´½¨TensorRTµÄbuilder
@@ -36,23 +45,42 @@ void test_custom_kpn() {
     }
 
     auto context = engine->createExecutionContext();
-    int input_idx[2];
+    int input_idx[3];
     int output_idx;
-    input_idx[0] = engine->getBindingIndex("input0");
-    input_idx[1] = engine->getBindingIndex("input1");
+    void * device_buffer[4];
+
+    input_idx[0] = engine->getBindingIndex("kernel");
+    input_idx[1] = engine->getBindingIndex("radiance");
+    input_idx[2] = engine->getBindingIndex("onnx::Cast_2");
     output_idx = engine->getBindingIndex("output0");
-    
-    cudaStream_t stream;
+
+    int input_sz[3];
+    int output_sz;
+
+
+
+    for (int i = 0; i < 3; i++) {
+        auto input_dim = engine->getBindingDimensions(input_idx[i]);
+        input_sz[i] = GetDimsSize(input_dim);
+        cudaMalloc(&device_buffer[input_idx[i]], input_sz[i] * sizeof(float));
+    }
+
+    auto output_dim = engine->getBindingDimensions(output_idx);
+    output_sz = GetDimsSize(output_dim);
+    cudaMalloc(&device_buffer[output_idx], output_sz * sizeof(float));
+       
+    cudaStream_t stream{};
     cudaEvent_t start, end;
     cudaEventCreate(&start);
     cudaEventCreate(&end);
     cudaEventRecord(start, stream);
-    auto input_name = engine->getIOTensorName(input_idx[0]);
-    auto extra_input_name = engine->getIOTensorName(input_idx[1]);
+    const char *input_name[3];
+    for (int i = 0; i < 3; i++) {
+        input_name[i] = engine->getIOTensorName(input_idx[i]);
+        context->setTensorAddress(input_name[i], device_buffer[input_idx[i]]);
+    }
     auto output_name = engine->getIOTensorName(output_idx);
-    void *device_buffer[3];
-    context->setTensorAddress(input_name, device_buffer[input_idx[0]]);
-    context->setTensorAddress(extra_input_name, device_buffer[input_idx[1]]);
+
     context->setTensorAddress(output_name, device_buffer[output_idx]);
     context->enqueueV3(stream);
     cudaEventRecord(end, stream);
