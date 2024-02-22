@@ -23,9 +23,9 @@ typedef enum {
     STATUS_NOT_INITIALIZED = 4
 } pluginStatus_t;
 
-}
+}// namespace
 
-namespace Pupil::tensorRT {
+namespace nvinfer1 {
 class TRTPluginBase : public nvinfer1::IPluginV2DynamicExt {
 public:
     TRTPluginBase(const std::string &name) : mLayerName(name) {}
@@ -39,13 +39,12 @@ public:
     }
     const char *getPluginNamespace() const TRT_NOEXCEPT override { return mNamespace.c_str(); }
 
-    virtual void configurePlugin(const nvinfer1::DynamicPluginTensorDesc *in, int nbInputs,
-                                 const nvinfer1::DynamicPluginTensorDesc *out,
-                                 int nbOutputs) TRT_NOEXCEPT override {}
+    virtual void configurePlugin(DynamicPluginTensorDesc const *in, int32_t nbInputs,
+                                 DynamicPluginTensorDesc const *out, int32_t nbOutputs) TRT_NOEXCEPT override {}
 
-    virtual size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc *inputs, int nbInputs,
+    virtual size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc *inputs, int32_t nbInputs,
                                     const nvinfer1::PluginTensorDesc *outputs,
-                                    int nbOutputs) const TRT_NOEXCEPT override {
+                                    int32_t nbOutputs) const TRT_NOEXCEPT override {
         return 0;
     }
 
@@ -108,8 +107,6 @@ inline size_t getAlignedSize(size_t origin_size, size_t aligned_number = 16) {
     return size_t((origin_size + aligned_number - 1) / aligned_number) * aligned_number;
 }
 
-
-} // namespace Pupil::tensorRT
 #ifndef DEBUG
 
 #define PLUGIN_CHECK(status)                                                                                           \
@@ -197,5 +194,7 @@ inline size_t getAlignedSize(size_t origin_size, size_t aligned_number = 16) {
     } while (0)
 
 #endif // DEBUG
+
+} // namespace nvinfer1
 #endif // TRT_BASE_PLUGIN_H
 

@@ -99,7 +99,7 @@ struct Serializer<std::vector<T>,
 
 }// namespace
 
-namespace Pupil::tensorRT {
+namespace nvinfer1 {
 
 template<typename T>
 inline size_t serialized_size(T const &value) {
@@ -116,4 +116,4 @@ inline void deserialize_value(void const **buffer, size_t *buffer_size, T *value
     return Serializer<T>::deserialize(buffer, buffer_size, value);
 }
 
-}// namespace Pupil::tensorRT
+}// namespace nvinfer1

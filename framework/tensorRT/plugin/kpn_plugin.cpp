@@ -1,14 +1,14 @@
 #include "kpn_plugin.h"
 #include "trt_serialize.h"
 
-using namespace nvinfer1;
 
 namespace {
 static const char *PLUGIN_VERSION{ "1" };
 static const char *PLUGIN_NAME{ "KPN" };
 } // namespace
 
-namespace Pupil::tensorRT {
+
+namespace nvinfer1 {
 
 KPNPluginDynamic::KPNPluginDynamic(
     const std::string &name,
@@ -19,8 +19,6 @@ KPNPluginDynamic::KPNPluginDynamic(const std::string &name, void const* data, si
     deserialize(static_cast<uint8_t const*>(data), length);
 }
 
-KPNPluginDynamic::~KPNPluginDynamic() {}
-
 nvinfer1::IPluginV2DynamicExt *KPNPluginDynamic::clone() const TRT_NOEXCEPT {
     KPNPluginDynamic *plugin = new KPNPluginDynamic(mLayerName,
         mDilation);
@@ -30,7 +28,7 @@ nvinfer1::IPluginV2DynamicExt *KPNPluginDynamic::clone() const TRT_NOEXCEPT {
 }
 
 nvinfer1::DimsExprs KPNPluginDynamic::getOutputDimensions(
-    int outputIndex, const nvinfer1::DimsExprs *inputs, int nbInputs,
+    int32_t outputIndex, const nvinfer1::DimsExprs *inputs, int32_t nbInputs,
     nvinfer1::IExprBuilder &exprBuilder) TRT_NOEXCEPT {
 
     nvinfer1::DimsExprs ret;
@@ -46,10 +44,10 @@ nvinfer1::DimsExprs KPNPluginDynamic::getOutputDimensions(
 
 // TODO Int8
 bool KPNPluginDynamic::supportsFormatCombination(
-    int pos,
+    int32_t pos,
     const nvinfer1::PluginTensorDesc *ioDesc,
-    int nbInputs,
-    int nbOutputs) TRT_NOEXCEPT {
+    int32_t nbInputs,
+    int32_t nbOutputs) TRT_NOEXCEPT {
     if (pos == 0) {
         return ((ioDesc[0].type == nvinfer1::DataType::kFLOAT || ioDesc[0].type == nvinfer1::DataType::kHALF)
                 // || ioDesc[0].type == nvinfer1::DataType::kInt8)
@@ -60,22 +58,22 @@ bool KPNPluginDynamic::supportsFormatCombination(
 }
 
 void KPNPluginDynamic::configurePlugin(const nvinfer1::DynamicPluginTensorDesc *inputs,
-                                       int nbInputs,
+                                       int32_t nbInputs,
                                        const nvinfer1::DynamicPluginTensorDesc *outputs,
-                                       int nbOutputs) TRT_NOEXCEPT {}
+                                       int32_t nbOutputs) TRT_NOEXCEPT {}
 
 // TODO cublas im2col matrix multiply
 size_t KPNPluginDynamic::getWorkspaceSize(const nvinfer1::PluginTensorDesc *inputs,
-                                          int nbInputs,
+                                          int32_t nbInputs,
                                           const nvinfer1::PluginTensorDesc *outputs,
-                                          int nbOutputs) const TRT_NOEXCEPT {
+                                          int32_t nbOutputs) const TRT_NOEXCEPT {
     return 0;
    }
 
 nvinfer1::DataType KPNPluginDynamic::getOutputDataType(
-    int index,
+    int32_t index,
     const nvinfer1::DataType *inputTypes,
-    int nbInputs) const TRT_NOEXCEPT {
+    int32_t nbInputs) const TRT_NOEXCEPT {
     return inputTypes[0];
 }
 
@@ -87,15 +85,15 @@ const char* KPNPluginDynamic::getPluginType() const TRT_NOEXCEPT {
     return PLUGIN_NAME;
 }
 
-const char* KPNPluginDynamic::getPluginVersion() const {
+const char* KPNPluginDynamic::getPluginVersion() const TRT_NOEXCEPT{
     return PLUGIN_VERSION;
 }
 
-int KPNPluginDynamic::getNbOutputs() const TRT_NOEXCEPT {
+int32_t KPNPluginDynamic::getNbOutputs() const TRT_NOEXCEPT {
     return 1;
 }
 
-size_t KPNPluginDynamic::getSerializationSize() const TRTNOEXCEPT {
+size_t KPNPluginDynamic::getSerializationSize() const TRT_NOEXCEPT {
     return serialized_size(mDilation);
 }
 
@@ -158,4 +156,4 @@ nvinfer1::IPluginV2 *KPNPluginDynamicCreator::deserializePlugin(
 
 REGISTER_TENSORRT_PLUGIN(KPNPluginDynamicCreator);
 
-} // namespace Pupil::tensorRT
+} // namespace nvinfer1
