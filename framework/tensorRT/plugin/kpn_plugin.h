@@ -65,7 +65,7 @@ private:
     nvinfer1::Dims mDilation;
     
     void deserialize(uint8_t const *data, size_t length) TRTNOEXCEPT;
-    cublasHandle_t mCublasHandle;
+     // cublasHandle_t mCublasHandle;
 };
 
 class KPNPluginDynamicCreator : public TRTPluginCreatorBase {

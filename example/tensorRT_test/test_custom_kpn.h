@@ -14,6 +14,20 @@ static inline size_t GetDimsSize(const nvinfer1::Dims &dims) {
         sz *= dims.d[i];
     return sz;
 }
+
+
+std::vector<float> loadInputData(const std::string &inputFilePath, size_t size) {
+    std::vector<float> inputData(size);
+    std::ifstream file(inputFilePath, std::ios::binary);
+    if (file.is_open()) {
+        file.read(reinterpret_cast<char *>(inputData.data()), size * sizeof(float));
+        file.close();
+    } else {
+        std::cerr << "Error opening file: " << inputFilePath << std::endl;
+    }
+    return inputData;
+}
+
 }
 
 void test_import_custom_kpn() {
@@ -93,3 +107,57 @@ void test_import_custom_kpn() {
 }
 
 
+void test_kpn_plugin() {
+    nvinfer1::Dims kernelDims{ 1, 49, 1080, 1920 };
+    std::vector<float> kernel = loadInputData("kernel_data.bin", GetDimsSize(kernelDims));
+    nvinfer1::Dims radianceDims{ 1, 3, 1080, 1920 };
+    std::vector<float> radiance = loadInputData("radiance_data.bin", GetDimsSize(radianceDims));
+    
+    int k = 7, h = 1080, w = 1920;
+
+    auto builder = nvinfer1::createInferBuilder(Pupil::tensorRT::gLogger);
+    auto network = builder->createNetworkV2(0U);
+
+    // Input
+    auto kernelT = network->addInput("kernel", nvinfer1::DataType::kFLOAT, kernelDims);
+    auto radianceT = network->addInput("radiance", nvinfer1::DataType::kFLOAT, radianceDims);
+     // Softmax
+    auto *softmaxLayer = network->addSoftMax(*kernelT);
+    softmaxLayer->setAxes(1 << 1);
+
+    // View + Permutation
+    auto *softmaxOutput = softmaxLayer->getOutput(0);
+    auto *shuffleLayer = network->addShuffle(*softmaxOutput);
+    shuffleLayer->setReshapeDimensions(nvinfer1::Dims{ -1, k, k, h, w });
+    nvinfer1::Permutation permutation = { 0, 3, 4, 1, 2 };
+    shuffleLayer->setSecondTranspose(permutation);
+
+    // Create kpn plugin
+    nvinfer1::IPluginCreator *pluginCreator =
+        nvinfer1::getBuilderPluginRegistry(nvinfer1::EngineCapability::kDEFAULT)
+            ->getPluginCreator("KPN", "1");
+
+    // plugin field names & values
+    const char *dilationFieldName = "dilation";
+    int dilation[2] = { 1, 1 };
+
+    // PluginField
+    nvinfer1::PluginField dilationField(dilationFieldName, dilation, nvinfer1::PluginFieldType::kINT32, 2);
+
+    // add PluginField
+    nvinfer1::PluginFieldCollection *pluginFieldCollection = new nvinfer1::PluginFieldCollection();
+    pluginFieldCollection->nbFields = 1;
+    pluginFieldCollection->fields = &dilationField;
+
+    nvinfer1::IPluginV2 *plugin = pluginCreator->createPlugin("kernel prediction", pluginFieldCollection);
+    nvinfer1::ITensor *inputTensors[] = { shuffleLayer->getOutput(0), radianceT };
+    nvinfer1::IPluginV2Layer *pluginLayer = network->addPluginV2(inputTensors, 2, *plugin);
+    pluginLayer->getOutput(0)->setName("output");
+    
+    // build
+    auto config = builder->createBuilderConfig();
+    config->setMaxWorkspaceSize(1 << 20);// 为构建器设置工作空间大小
+    auto engine = builder->buildEngineWithConfig(*network, *config);
+
+
+}

@@ -120,9 +120,20 @@ void TRTDenoiser::BuildEngineFromOnnx(const std::string &onnx_file) {
         // Get output
         nvinfer1::ITensor *kernelT = network->getOutput(0);
         nvinfer1::ITensor *radianceT = network->getOutput(1);
+        auto dim = kernelT->getDimensions();
+        int k = sqrt(dim.d[1]);
+        int h = dim.d[2];
+        int w = dim.d[3];
         // Softmax
-        nvinfer1::ILayer *softmaxLayer = network->addSoftMax(*kernelT);
-        softmaxLayer->getOutput(0)->setName("SoftmaxKernelOutput");
+        auto *softmaxLayer = network->addSoftMax(*kernelT);
+        softmaxLayer->setAxes(1 << 1);
+
+        // View + Permutation
+        auto *softmaxOutput = softmaxLayer->getOutput(0);
+        auto *shuffleLayer = network->addShuffle(*softmaxOutput);
+        shuffleLayer->setReshapeDimensions(nvinfer1::Dims{-1, k, k, h, w});
+        nvinfer1::Permutation permutation = { 0, 3, 4, 1, 2 };
+        shuffleLayer->setSecondTranspose(permutation);
 
         // Create kpn plugin
         nvinfer1::IPluginCreator *pluginCreator =
@@ -142,7 +153,7 @@ void TRTDenoiser::BuildEngineFromOnnx(const std::string &onnx_file) {
         pluginFieldCollection->fields = &dilationField;
 
         nvinfer1::IPluginV2 *plugin = pluginCreator->createPlugin("kernel prediction", pluginFieldCollection);
-        nvinfer1::ITensor *inputTensors[] = { softmaxLayer->getOutput(0), radianceT };
+        nvinfer1::ITensor *inputTensors[] = { shuffleLayer->getOutput(0), radianceT };
         nvinfer1::IPluginV2Layer *pluginLayer = network->addPluginV2(inputTensors, 2, *plugin);
         pluginLayer->getOutput(0)->setName("output0");
     }
