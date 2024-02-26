@@ -1,5 +1,5 @@
+﻿#pragma once
 #include <NvInfer.h>
-
 #include "util/log.h"
 
 

@@ -1,4 +1,4 @@
-#include "trt_denoiser.h"
+﻿#include "trt_denoiser.h"
 #include "logger.h"
 
 #include "plugin/kpn_plugin.h"

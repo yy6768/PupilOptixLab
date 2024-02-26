@@ -1,4 +1,4 @@
-#include <iostream>
+﻿#include <iostream>
 #include <torch/torch.h>
 #include <c10/cuda/CUDAStream.h>
 
@@ -58,11 +58,13 @@ int main() {
     auto system = Pupil::util::Singleton<Pupil::System>::instance();
     system->Init(true);
     {   
-		switch (1) {
+		switch (2) {
 			// Main denoise network
             case 0: test_main();	   break;
-			// Custom kernel prediction
+			// Try to import pytorch custom kernel prediction （fail）
             case 1: test_import_custom_kpn(); break;
+			// Test plugin Kpn
+            case 2: test_kpn_plugin(); break;
 		}
 	}
     system->Destroy();

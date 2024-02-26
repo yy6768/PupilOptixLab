@@ -1,14 +1,13 @@
-#include "kpn_plugin.h"
+﻿#include "kpn_plugin.h"
 #include "trt_serialize.h"
 
 
 namespace {
 static const char *PLUGIN_VERSION{ "1" };
-static const char *PLUGIN_NAME{ "KPN" };
+static const char *PLUGIN_NAME{ "KPNPluginDynamic" };
 } // namespace
 
-
-namespace nvinfer1 {
+using namespace nvinfer1;
 
 KPNPluginDynamic::KPNPluginDynamic(
     const std::string &name,
@@ -16,7 +15,7 @@ KPNPluginDynamic::KPNPluginDynamic(
     : TRTPluginBase(name), mDilation(dilation) {}
 
 KPNPluginDynamic::KPNPluginDynamic(const std::string &name, void const* data, size_t length) : TRTPluginBase(name) {
-    deserialize(static_cast<uint8_t const*>(data), length);
+    deserialize_value(&data, &length, &mDilation);
 }
 
 nvinfer1::IPluginV2DynamicExt *KPNPluginDynamic::clone() const TRT_NOEXCEPT {
@@ -34,10 +33,10 @@ nvinfer1::DimsExprs KPNPluginDynamic::getOutputDimensions(
     nvinfer1::DimsExprs ret;
 
     ret.nbDims = 4;
-    ret.d[0] = inputs[0].d[0];
-    ret.d[1] = inputs[0].d[1];
-    ret.d[2] = inputs[0].d[2];
-    ret.d[3] = inputs[0].d[3];
+    ret.d[0] = inputs[1].d[0];
+    ret.d[1] = inputs[1].d[1];
+    ret.d[2] = inputs[1].d[2];
+    ret.d[3] = inputs[1].d[3];
 
     return ret;
 }
@@ -68,7 +67,7 @@ size_t KPNPluginDynamic::getWorkspaceSize(const nvinfer1::PluginTensorDesc *inpu
                                           const nvinfer1::PluginTensorDesc *outputs,
                                           int32_t nbOutputs) const TRT_NOEXCEPT {
     return 0;
-   }
+}
 
 nvinfer1::DataType KPNPluginDynamic::getOutputDataType(
     int32_t index,
@@ -100,10 +99,13 @@ size_t KPNPluginDynamic::getSerializationSize() const TRT_NOEXCEPT {
 void KPNPluginDynamic::attachToContext(
     cudnnContext* cudnnContext, cublasContext* cublasContext,
     nvinfer1::IGpuAllocator* gpuAllocator) TRT_NOEXCEPT {
-    mCublasHandle = cublasContext;
 }
 
 void KPNPluginDynamic::detachFromContext() TRT_NOEXCEPT {}
+
+void KPNPluginDynamic::serialize(void *buffer) const TRT_NOEXCEPT {
+    serialize_value(&buffer, mDilation);
+}
 
 // **********************
 // Creator methods
@@ -154,6 +156,5 @@ nvinfer1::IPluginV2 *KPNPluginDynamicCreator::deserializePlugin(
     return plugin;
 }
 
-REGISTER_TENSORRT_PLUGIN(KPNPluginDynamicCreator);
 
-} // namespace nvinfer1
+//REGISTER_TENSORRT_PLUGIN(KPNPluginDynamicCreator);

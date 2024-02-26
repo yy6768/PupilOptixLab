@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #ifndef TRT_KPN_PLUGIN_H
 #define TRT_KPN_PLUGIN_H
 #include <NvInfer.h>
@@ -64,8 +64,7 @@ private:
     const std::string mLayerName;
     nvinfer1::Dims mDilation;
     
-    void deserialize(uint8_t const *data, size_t length) TRTNOEXCEPT;
-     // cublasHandle_t mCublasHandle;
+    // cublasHandle_t mCublasHandle;
 };
 
 class KPNPluginDynamicCreator : public TRTPluginCreatorBase {

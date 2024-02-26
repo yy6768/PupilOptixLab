@@ -16,9 +16,9 @@ __global__ void kernelFilterKernel(
     const scalar_t *__restrict__ radiance,// [B, C, H, W]
     scalar_t *__restrict__ output,        // [B, C, H, W]
     const int batch,
+    const int channel,
     const int height,
     const int width,
-    const int channel,
     const int k0,    // filter size
     const int half_k,// k0 / 2
     const int dilation_h,
@@ -41,7 +41,7 @@ __global__ void kernelFilterKernel(
     const int off_k = ((n * height + xi) * width + yi) * k0 * k0;
 
     if (n >= batch || c >= channel || xi >= height || yi >= width) return;
-    scalar_t color = 0.0f;
+    scalar_t color = scalar_t(0);
 
     for (int io = -half_k; io <= half_k; io++) {
         int xo = xi + io * dilation_h;// True output height index
@@ -66,9 +66,9 @@ int kernelFilterKernelLauncher(
     const scalar_t *__restrict__ radiance,// [B, C, H, W]
     scalar_t *__restrict__ output,        // [B, C, H, W]
     const int batch,
+    const int channel,
     const int height,
     const int width,
-    const int channel,
     const int k0,    // filter size
     const int half_k,// k0 / 2
     const int dilation_h,
@@ -80,9 +80,9 @@ int kernelFilterKernelLauncher(
         radiance,
         output,
         batch,
+        channel,
         height,
         width,
-        channel,
         k0,
         half_k,
         dilation_h,
