@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <torch/torch.h>
 
 #include "util/util.h"

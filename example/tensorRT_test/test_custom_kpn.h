@@ -5,6 +5,10 @@
 #include <fstream>
 #include <filesystem>
 
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
+
 #include "tensorRT/logger.h"
 #include "tensorRT/plugin/plugin_register.h"
 #include "tensorRT/plugin/kpn_plugin.h"
@@ -146,17 +150,13 @@ void test_kpn_plugin() {
 
     // View + Permutation
     auto *softmaxOutput = softmaxLayer->getOutput(0);
-    auto *shuffleLayer = network->addShuffle(*softmaxOutput);
-    nvinfer1::Dims shuffleDims;
-    shuffleDims.nbDims = 5;
-    shuffleDims.d[0] = -1;
-    shuffleDims.d[1] = k;
-    shuffleDims.d[2] = k;
-    shuffleDims.d[3] = h;
-    shuffleDims.d[4] = w;
-    shuffleLayer->setReshapeDimensions(shuffleDims);
+    auto *kernelShuffleLayer = network->addShuffle(*softmaxOutput);
+    nvinfer1::Dims shuffleDims{
+        5, { 1, k, k, h, w }
+    };
+    kernelShuffleLayer->setReshapeDimensions(shuffleDims);
     nvinfer1::Permutation permutation = { 0, 3, 4, 1, 2 };
-    shuffleLayer->setSecondTranspose(permutation);
+    kernelShuffleLayer->setSecondTranspose(permutation);
 
     
     // Create kpn plugin
@@ -177,12 +177,12 @@ void test_kpn_plugin() {
     pluginFieldCollection->fields = &dilationField;
 
     nvinfer1::IPluginV2 *plugin = pluginCreator->createPlugin("kernel prediction", pluginFieldCollection);
-    nvinfer1::ITensor *inputTensors[] = { shuffleLayer->getOutput(0), radianceT };
+    nvinfer1::ITensor *inputTensors[] = { kernelShuffleLayer->getOutput(0), radianceT };
     nvinfer1::IPluginV2Layer *pluginLayer = network->addPluginV2(inputTensors, 2, *plugin);
     pluginLayer->getOutput(0)->setName("output");
     network->markOutput(*(pluginLayer->getOutput(0))); 
-    //shuffleLayer->getOutput(0)->setName("output");
-    //network->markOutput(*(shuffleLayer->getOutput(0)));
+    //kernelShuffleLayer->getOutput(0)->setName("output");
+    //network->markOutput(*(kernelShuffleLayer->getOutput(0)));
     
     // build
     auto config = builder->createBuilderConfig();
@@ -223,12 +223,12 @@ void test_kpn_plugin() {
     cudaMalloc(&device_buffer[output_idx], output_sz * sizeof(float));
 
     // Organize input data
-    cudaMemcpyAsync(device_buffer[input_idx[0]], 
-        kernel.data(), input_sz[0] * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpyAsync(device_buffer[input_idx[1]],
-                    radiance.data(), input_sz[1] * sizeof(float), cudaMemcpyHostToDevice);
-
     cudaStream_t stream{};
+    cudaMemcpyAsync(device_buffer[input_idx[0]], 
+        kernel.data(), input_sz[0] * sizeof(float), cudaMemcpyHostToDevice, stream);
+    cudaMemcpyAsync(device_buffer[input_idx[1]],
+                    radiance.data(), input_sz[1] * sizeof(float), cudaMemcpyHostToDevice, stream);
+
     cudaEvent_t start, end;
     cudaEventCreate(&start);
     cudaEventCreate(&end);
@@ -259,4 +259,123 @@ void test_kpn_plugin() {
     cudaFree(device_buffer[input_idx[0]]);
     cudaFree(device_buffer[input_idx[1]]);
     cudaFree(device_buffer[output_idx]);
+}
+
+
+
+
+void test_kpn() {
+    std::filesystem::path root_path = std::filesystem::current_path()
+                                          .parent_path()
+                                          .parent_path()
+                                          .parent_path();
+    std::filesystem::path data_path = root_path / "data";
+    std::filesystem::path kernel_path = data_path / "input" / "kernel_data.bin";
+    std::filesystem::path radiance_path = data_path / "input" / "radiance_data.bin";
+    std::filesystem::path output_path = data_path / "input" / "expect_output_data_trt.bin";
+    nvinfer1::Dims4 kernelDims{ 1, 49, 1080, 1920 };
+    std::vector<float> kernel = loadInputData(kernel_path.string(), GetDimsSize(kernelDims));
+    nvinfer1::Dims4 radianceDims{ 1, 3, 1080, 1920 };
+    std::vector<float> radiance = loadInputData(radiance_path.string(), GetDimsSize(radianceDims));
+
+    int k = 7, h = 1080, w = 1920;
+
+    auto builder = nvinfer1::createInferBuilder(Pupil::tensorRT::gLogger);
+    uint32_t flag = 1U << static_cast<uint32_t>(
+                        nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+    auto network = builder->createNetworkV2(flag);
+
+     // onnx parser
+    auto parser = nvonnxparser::createParser(*network, Pupil::tensorRT::gLogger);
+
+    std::filesystem::path onnx_path = data_path / "onnx" / "kpn.onnx";
+    parser->parseFromFile(onnx_path.string().c_str(), static_cast<int>(nvinfer1::ILogger::Severity::kINFO));
+  
+    // build
+    auto config = builder->createBuilderConfig();
+    if (builder->platformHasFastFp16()) {
+        Pupil::Log::Info("Enable fp16");
+        config->setFlag(nvinfer1::BuilderFlag::kFP16);
+    } else {
+        Pupil::Log::Info("Builfer not support fp16");
+    }
+
+    size_t free_size, total_size;
+    cuMemGetInfo(&free_size, &total_size);
+    Pupil::Log ::Info("Total GPU mem: {} MB, free GPU mem: {} MB", total_size >> 20, free_size >> 20);
+    config->setMaxWorkspaceSize(free_size);
+    auto plan = builder->buildSerializedNetwork(*network, *config);
+    auto runtime = createInferRuntime(Pupil::tensorRT::gLogger);
+
+    auto engine = runtime->deserializeCudaEngine(plan->data(), plan->size());
+    for (int i = 0; i < engine->getNbBindings(); i++) {
+        Pupil::Log::Info("Binding {} : name : {}, Isinput:{}", i, engine->getBindingName(i), (engine->bindingIsInput(i) ? "Yes" : "No"));
+    }
+
+   auto context = engine->createExecutionContext();
+   int input_idx[3];
+   int output_idx;
+   void *device_buffer[4];
+
+   input_idx[0] = engine->getBindingIndex("kernel");
+   input_idx[1] = engine->getBindingIndex("radiance");
+   input_idx[2] = engine->getBindingIndex("onnx::Cast_2");
+   output_idx = engine->getBindingIndex("output");
+
+   int input_sz[3];
+   int output_sz;
+
+    for (int i = 0; i < 3; i++) {
+        auto input_dim = engine->getBindingDimensions(input_idx[i]);
+        input_sz[i] = GetDimsSize(input_dim);
+        cudaMalloc(&device_buffer[input_idx[i]], input_sz[i] * sizeof(float));
+    }
+
+    auto output_dim = engine->getBindingDimensions(output_idx);
+    output_sz = GetDimsSize(output_dim);
+    cudaMalloc(&device_buffer[output_idx], output_sz * sizeof(float));
+
+    // Organize input data
+    
+    cudaStream_t stream{};
+    cudaMemcpyAsync(device_buffer[input_idx[0]],
+                    kernel.data(), input_sz[0] * sizeof(float), cudaMemcpyHostToDevice, stream);
+    cudaMemcpyAsync(device_buffer[input_idx[1]],
+                    radiance.data(), input_sz[1] * sizeof(float), cudaMemcpyHostToDevice, stream);
+    float *extra_input = new float[input_sz[2]];
+    cudaMemcpyAsync(device_buffer[input_idx[2]],
+                    extra_input, input_sz[2] * sizeof(float), cudaMemcpyHostToDevice, stream);
+
+    cudaEvent_t start, end;
+    cudaEventCreate(&start);
+    cudaEventCreate(&end);
+    cudaEventRecord(start, stream);
+    const char *input_name[3];
+    for (int i = 0; i < 3; i++) {
+        input_name[i] = engine->getIOTensorName(input_idx[i]);
+        context->setTensorAddress(input_name[i], device_buffer[input_idx[i]]);
+    }
+    auto output_name = engine->getIOTensorName(output_idx);
+    context->setTensorAddress(output_name, device_buffer[output_idx]);
+    context->enqueueV3(stream);
+    cudaEventRecord(end, stream);
+    cudaEventSynchronize(end);
+    float total_time;
+    cudaEventElapsedTime(&total_time, start, end);
+    Pupil::Log::Info("total_time:{}", total_time);
+
+    std::vector<float> output(output_sz);
+    cudaMemcpy(output.data(), device_buffer[output_idx], output_sz * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // 保存到bin文件
+    std::ofstream outputFile(output_path.string(), std::ios::binary);
+    outputFile.write(reinterpret_cast<char *>(output.data()), output_sz * sizeof(float));
+    outputFile.close();
+
+    cudaFree(device_buffer[input_idx[0]]);
+    cudaFree(device_buffer[input_idx[1]]);
+    cudaFree(device_buffer[input_idx[2]]);
+    cudaFree(device_buffer[output_idx]);
+    delete[] extra_input;
+    parser->destroy();
 }

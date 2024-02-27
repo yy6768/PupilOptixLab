@@ -14,16 +14,16 @@ public:
         Cache
     };
 
-    explicit TRTDenoiser(const std::string &onnx_file, 
-        ImportMode mode = ImportMode::Onnx,
-        bool use_kpn=false);
+    explicit TRTDenoiser(const std::string &onnx_file,
+                         ImportMode mode = ImportMode::Onnx,
+                         bool use_kpn = false);
 
     ~TRTDenoiser();
 
     TRTDenoiser(const TRTDenoiser &) = delete;
     TRTDenoiser operator=(const TRTDenoiser &) = delete;
     // Neural network infer
-    float* operator() (const float* ) const;
+    float *operator()(const float *) const;
 
 private:
     // Buffer size (1 input, 1 output)

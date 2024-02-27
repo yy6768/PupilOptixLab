@@ -65,6 +65,8 @@ int main() {
             case 1: test_import_custom_kpn(); break;
 			// Test plugin Kpn
             case 2: test_kpn_plugin(); break;
+			// Test default KPN
+            case 3: test_kpn(); break;
 		}
 	}
     system->Destroy();

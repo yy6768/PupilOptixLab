@@ -131,14 +131,14 @@ void TRTDenoiser::BuildEngineFromOnnx(const std::string &onnx_file) {
         // View + Permutation
         auto *softmaxOutput = softmaxLayer->getOutput(0);
         auto *shuffleLayer = network->addShuffle(*softmaxOutput);
-        shuffleLayer->setReshapeDimensions(nvinfer1::Dims{-1, k, k, h, w});
+        shuffleLayer->setReshapeDimensions(nvinfer1::Dims{ 5, { -1, k, k, h, w } });
         nvinfer1::Permutation permutation = { 0, 3, 4, 1, 2 };
         shuffleLayer->setSecondTranspose(permutation);
 
         // Create kpn plugin
         nvinfer1::IPluginCreator *pluginCreator =
             nvinfer1::getBuilderPluginRegistry(nvinfer1::EngineCapability::kDEFAULT)
-                ->getPluginCreator("KPN", "1");
+                ->getPluginCreator("KPNPluginDynamic", "1");
 
         // plugin field names & values
         const char *dilationFieldName = "dilation";
@@ -156,6 +156,7 @@ void TRTDenoiser::BuildEngineFromOnnx(const std::string &onnx_file) {
         nvinfer1::ITensor *inputTensors[] = { shuffleLayer->getOutput(0), radianceT };
         nvinfer1::IPluginV2Layer *pluginLayer = network->addPluginV2(inputTensors, 2, *plugin);
         pluginLayer->getOutput(0)->setName("output0");
+        network->markOutput(*(pluginLayer->getOutput(0)));
     }
 
     // Build each layer of the network
@@ -181,10 +182,7 @@ void TRTDenoiser::BuildEngineFromOnnx(const std::string &onnx_file) {
     config->setMaxWorkspaceSize(free_size);
     TRT_ASSERT(m_engine = std::unique_ptr<nvinfer1::ICudaEngine>(builder->buildEngineWithConfig(*network, *config)), "Build engine fail");
     // Destroy the local variable
-    config->destroy();
     parser->destroy();
-    network->destroy();
-    builder->destroy();
 }
 
 /**
@@ -229,6 +227,7 @@ void TRTDenoiser::CacheEngine(const std::string& cache_file) {
     engine_buffer->destroy();
 }
 
+
 /**
 * Denoise function
 */ 
@@ -268,6 +267,5 @@ void TRTDenoiser::CacheEngine(const std::string& cache_file) {
         m_output_sz * sizeof(float), cudaMemcpyDeviceToHost, m_stream->GetStream());
     return m_output_buffer;
  }
-
 
 } // namespace Pupil::tensorRT
