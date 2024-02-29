@@ -1,5 +1,5 @@
 ﻿#include "kpn_plugin.h"
-#include "trt_serialize.h"
+#include "tensorRT/plugin/common/trt_serialize.h"
 
 
 namespace {

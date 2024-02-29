@@ -3,18 +3,18 @@
 // Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 #include "kpn_plugin.h"
-#include "trt_common.h"
+#include "tensorRT/plugin/common/trt_common.h"
 #include <cuda.h>
 #include <cuda_fp16.h>
 
-using namespace nvinfer1;
 namespace nvinfer1 {
+
 
 template<typename scalar_t>
 __global__ void kernelFilterKernel(
     const scalar_t *__restrict__ kernel,  // [B, H, W, k, k]
-    const scalar_t *__restrict__ radiance,// [B, C, H, W]
-    scalar_t *__restrict__ output,        // [B, C, H, W]
+    const scalar_t *__restrict__ radiance,// [B, H, W, C]
+    scalar_t *__restrict__ output,        // [B, H, W, C]
     const int batch,
     const int channel,
     const int height,
@@ -25,9 +25,7 @@ __global__ void kernelFilterKernel(
     const int dilation_w) {
 
     // batch index
-    const int n = blockIdx.z;
-    // channels index
-    const int c = blockIdx.y;
+    const int n = blockIdx.y;
     // column index
     const int col = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -35,31 +33,39 @@ __global__ void kernelFilterKernel(
     const int yi = col % width;// Kernel width index
 
     // radiance offset
-    const int off_r = (n * channel + c) * width * height;
+    const int off_r = n * height * width * channel;
 
     // kernel radiance offset
     const int off_k = ((n * height + xi) * width + yi) * k0 * k0;
 
-    if (n >= batch || c >= channel || xi >= height || yi >= width) return;
-    scalar_t color = scalar_t(0);
-
+    if (n >= batch || xi >= height || yi >= width) return;
+    scalar_t color[3] = { scalar_t(0), scalar_t(0), scalar_t(0) };
+    
     for (int io = -half_k; io <= half_k; io++) {
         int xo = xi + io * dilation_h;// True output height index
         if (xo < 0 || xo >= height) continue;
         for (int jo = -half_k; jo <= half_k; jo++) {
             int yo = yi + jo * dilation_w;// True output width index
             if (yo < 0 || yo >= width) continue;
-            int radiance_idx = off_r + xo * width + yo;
-            if (radiance[radiance_idx] > scalar_t(0)) {
-                int kernel_idx = off_k + (io + half_k) * k0 + jo + half_k;
-                color += radiance[radiance_idx] * kernel[kernel_idx];
+            int radiance_idx = off_r + (xo * width + yo) * channel;
+            int kernel_idx = off_k + (io + half_k) * k0 + jo + half_k;
+            #pragma unroll
+            for (int c = 0; c < 3; c++) {
+                if (radiance[radiance_idx + c] > scalar_t(0)) {
+                    color[c] += radiance[radiance_idx + c] * kernel[kernel_idx];
+                }
             }
         }
     }
-    int output_idx = off_r + xi * width + yi;
-    output[output_idx] = color;
+    int output_idx = off_r + (xi * width + yi) * channel;
+    output[output_idx] = color[0];
+    output[output_idx + 1] = color[1];
+    output[output_idx + 2] = color[2];
 }
 
+/**
+  *
+  */
 template<typename scalar_t>
 int kernelFilterKernelLauncher(
     const scalar_t *__restrict__ kernel,  // [B, H, W, k, k]
@@ -73,7 +79,7 @@ int kernelFilterKernelLauncher(
     const int half_k,// k0 / 2
     const int dilation_h,
     const int dilation_w) {
-    const dim3 blocks(GET_BLOCKS(height * width), channel, batch);
+    const dim3 blocks(GET_BLOCKS(height * width), batch);
 
     kernelFilterKernel<scalar_t><<<blocks, NUM_THREADS>>>(
         kernel,

@@ -18,7 +18,7 @@
 
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
-#include "kpn_plugin.h"
+#include "tensorRT/plugin/kpn/kpn_plugin.h"
 
 #include "tensorRT/logger.h"
 

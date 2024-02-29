@@ -9,7 +9,7 @@
 #include <vector>
 #include <iostream>
 
-#include "base_plugin.h"
+#include "tensorRT/plugin/common/base_plugin.h"
 
 namespace nvinfer1 {
 class KPNPluginDynamic : public TRTPluginBase {

@@ -1,7 +1,7 @@
 ﻿#include "trt_denoiser.h"
 #include "logger.h"
 
-#include "plugin/kpn_plugin.h"
+#include "plugin/kpn/kpn_plugin.h"
 
 #include "util/timer.h"
 

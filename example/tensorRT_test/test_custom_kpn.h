@@ -10,8 +10,8 @@
 #include <cuda_runtime_api.h>
 
 #include "tensorRT/logger.h"
-#include "tensorRT/plugin/plugin_register.h"
-#include "tensorRT/plugin/kpn_plugin.h"
+#include "tensorRT/plugin/common/plugin_register.h"
+#include "tensorRT/plugin/kpn/kpn_plugin.h"
 
 namespace {
 inline size_t GetDimsSize(const nvinfer1::Dims &dims) {
@@ -128,7 +128,7 @@ void test_kpn_plugin() {
     nvinfer1::Dims4 radianceDims{ 1, 3, 1080, 1920 };
     std::vector<float> radiance = loadInputData(radiance_path.string(), GetDimsSize(radianceDims));
     
-    int k = 7, h = 1080, w = 1920;
+    int k = 7, h = 1080, w = 1920, c = 3;
 
     auto builder = nvinfer1::createInferBuilder(Pupil::tensorRT::gLogger);
      uint32_t flag = 1U << static_cast<uint32_t>(
@@ -151,12 +151,12 @@ void test_kpn_plugin() {
     // View + Permutation
     auto *softmaxOutput = softmaxLayer->getOutput(0);
     auto *kernelShuffleLayer = network->addShuffle(*softmaxOutput);
-    nvinfer1::Dims shuffleDims{
-        5, { 1, k, k, h, w }
-    };
-    kernelShuffleLayer->setReshapeDimensions(shuffleDims);
+    kernelShuffleLayer->setReshapeDimensions({ 5, { 1, k, k, h, w } });
     nvinfer1::Permutation permutation = { 0, 3, 4, 1, 2 };
     kernelShuffleLayer->setSecondTranspose(permutation);
+
+    auto *radianceShuffleLayer = network->addShuffle(*radianceT);
+    radianceShuffleLayer->setFirstTranspose({ 0, 2, 3, 1 });
 
     
     // Create kpn plugin
@@ -177,10 +177,14 @@ void test_kpn_plugin() {
     pluginFieldCollection->fields = &dilationField;
 
     nvinfer1::IPluginV2 *plugin = pluginCreator->createPlugin("kernel prediction", pluginFieldCollection);
-    nvinfer1::ITensor *inputTensors[] = { kernelShuffleLayer->getOutput(0), radianceT };
+    nvinfer1::ITensor *inputTensors[] = { kernelShuffleLayer->getOutput(0), radianceShuffleLayer->getOutput(0) };
     nvinfer1::IPluginV2Layer *pluginLayer = network->addPluginV2(inputTensors, 2, *plugin);
-    pluginLayer->getOutput(0)->setName("output");
-    network->markOutput(*(pluginLayer->getOutput(0))); 
+
+
+    auto *outputShuffleLayer = network->addShuffle(*(pluginLayer->getOutput(0)));
+    outputShuffleLayer->setFirstTranspose({ 0, 3, 1, 2 });
+    outputShuffleLayer->getOutput(0)->setName("output");
+    network->markOutput(*(outputShuffleLayer->getOutput(0))); 
     //kernelShuffleLayer->getOutput(0)->setName("output");
     //network->markOutput(*(kernelShuffleLayer->getOutput(0)));
     
