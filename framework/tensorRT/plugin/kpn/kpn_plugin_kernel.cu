@@ -1,4 +1,4 @@
-// Copyright(c) 2022 Alex S.Fu All rights reserved.
+﻿// Copyright(c) 2022 Alex S.Fu All rights reserved.
 // Inspired by https://github.com/IwakuraRein/KernelFilter-PyTorch/tree/main/_KernelFilter
 // Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
@@ -7,7 +7,22 @@
 #include <cuda.h>
 #include <cuda_fp16.h>
 
+
 namespace nvinfer1 {
+template<typename scalar_t>
+__device__ scalar_t gpu_max(scalar_t a, scalar_t b) {
+    return max(a, b);
+}
+
+template<>
+__device__ __half gpu_max(__half a, __half b) {
+    return a > b ? a : b;
+}
+
+template<>
+__device__ int8_t gpu_max(int8_t a, int8_t b) {
+    return a > b ? a : b;
+}
 
 
 template<typename scalar_t>
@@ -34,7 +49,7 @@ __global__ void kernelFilterKernel(
 
     // radiance offset
     const int off_r = n * height * width * channel;
-
+    const int stride = height * width;
     // kernel radiance offset
     const int off_k = ((n * height + xi) * width + yi) * k0 * k0;
 
@@ -47,20 +62,17 @@ __global__ void kernelFilterKernel(
         for (int jo = -half_k; jo <= half_k; jo++) {
             int yo = yi + jo * dilation_w;// True output width index
             if (yo < 0 || yo >= width) continue;
-            int radiance_idx = off_r + (xo * width + yo) * channel;
+            int radiance_idx = off_r + xo * width + yo;
             int kernel_idx = off_k + (io + half_k) * k0 + jo + half_k;
-            #pragma unroll
-            for (int c = 0; c < 3; c++) {
-                if (radiance[radiance_idx + c] > scalar_t(0)) {
-                    color[c] += radiance[radiance_idx + c] * kernel[kernel_idx];
-                }
-            }
+            color[0] += gpu_max(radiance[radiance_idx] * kernel[kernel_idx], scalar_t(0));
+            color[1] += gpu_max(radiance[radiance_idx + stride] * kernel[kernel_idx], scalar_t(0));
+            color[2] += gpu_max(radiance[radiance_idx + 2 * stride] * kernel[kernel_idx], scalar_t(0));
         }
     }
-    int output_idx = off_r + (xi * width + yi) * channel;
+    int output_idx = off_r + xi * width + yi;
     output[output_idx] = color[0];
-    output[output_idx + 1] = color[1];
-    output[output_idx + 2] = color[2];
+    output[output_idx + stride] = color[1];
+    output[output_idx + 2 * stride] = color[2];
 }
 
 /**

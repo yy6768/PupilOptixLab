@@ -168,6 +168,8 @@ void TRTDenoiser::BuildEngineFromOnnx(const std::string &onnx_file) {
     // ***********
     // Try to transform to FP16
     auto config = builder->createBuilderConfig();
+    config->setFlag(nvinfer1::BuilderFlag::kGPU_FALLBACK);
+    
     if (builder->platformHasFastFp16() && FP16_ENABLE) {
         Pupil::Log::Info("Enable fp16");
         config->setFlag(nvinfer1::BuilderFlag::kFP16);

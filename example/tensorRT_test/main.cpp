@@ -58,7 +58,7 @@ int main() {
     auto system = Pupil::util::Singleton<Pupil::System>::instance();
     system->Init(true);
     {   
-		switch (2) {
+		switch (3) {
 			// Main denoise network
             case 0: test_main();	   break;
 			// Try to import pytorch custom kernel prediction （fail）
